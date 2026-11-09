@@ -51,6 +51,8 @@ function DashboardContent() {
   const [createLoading, setCreateLoading] = useState(false);
   const [safetyNumbers, setSafetyNumbers] = useState<string[] | null>(null);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
+  const [showTerminateConfirm, setShowTerminateConfirm] = useState(false);
+  const [terminating, setTerminating] = useState(false);
   const [isPartnerOnline, setIsPartnerOnline] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
@@ -152,6 +154,27 @@ function DashboardContent() {
     }
   };
 
+  const handleTerminateConnection = async () => {
+    if (!space) return;
+    setTerminating(true);
+    try {
+      const res = await fetch('/api/spaces/terminate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spaceId: space.id }),
+      });
+      if (res.ok) {
+        setSpace(null);
+        setShowTerminateConfirm(false);
+        await fetchStatus();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTerminating(false);
+    }
+  };
+
   const copyCodeOnly = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(true);
@@ -241,6 +264,14 @@ function DashboardContent() {
                   <FolderLock className="w-4 h-4" />
                   <span>O Nosso Espaço</span>
                 </Link>
+
+                <button
+                  onClick={() => setShowTerminateConfirm(true)}
+                  className="w-full sm:w-auto px-6 py-4 border border-zinc-800 hover:border-red-500/40 text-zinc-500 hover:text-red-400 font-medium text-xs uppercase tracking-[0.2em] transition-colors"
+                  title="Encerrar conexão atual para conectar com outra pessoa"
+                >
+                  Encerrar Conexão
+                </button>
               </div>
             </div>
 
@@ -374,6 +405,44 @@ function DashboardContent() {
             >
               Fechar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM TERMINATION MODAL */}
+      {showTerminateConfirm && partner && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="max-w-md w-full border border-zinc-800 bg-[#0e0e10] p-8 text-center relative shadow-2xl">
+            <button
+              onClick={() => setShowTerminateConfirm(false)}
+              className="absolute top-4 right-4 text-zinc-500 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-base font-bold uppercase tracking-wider text-white mb-2">
+              Encerrar Conexão com {partner.name}?
+            </h3>
+            <p className="text-xs text-zinc-400 font-light leading-relaxed mb-6">
+              Ao encerrar esta conexão, o espaço atual será finalizado e o teu dashboard voltará a
+              ficar livre para criares um novo espaço ou entrares com outro código.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <button
+                onClick={handleTerminateConnection}
+                disabled={terminating}
+                className="w-full sm:w-auto px-6 py-3.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase tracking-widest transition-colors disabled:opacity-50"
+              >
+                {terminating ? 'A encerrar...' : 'Sim, Encerrar'}
+              </button>
+              <button
+                onClick={() => setShowTerminateConfirm(false)}
+                className="w-full sm:w-auto px-6 py-3.5 border border-zinc-700 text-zinc-300 hover:text-white text-xs uppercase tracking-widest transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

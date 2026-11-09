@@ -28,6 +28,7 @@ import {
   FolderLock,
   AlertTriangle,
   ArrowLeft,
+  LogOut,
 } from 'lucide-react';
 
 interface DecryptedMessage {
@@ -67,6 +68,8 @@ export default function ChatPage() {
 
   // Privacy screen shield on blur/tab switch
   const [isScreenHidden, setIsScreenHidden] = useState(false);
+  const [showTerminateModal, setShowTerminateModal] = useState(false);
+  const [terminating, setTerminating] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -259,6 +262,25 @@ export default function ChatPage() {
       }
     };
   }, [router]);
+
+  const handleTerminateConnection = async () => {
+    if (!space?.id) return;
+    setTerminating(true);
+    try {
+      const res = await fetch('/api/spaces/terminate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spaceId: space.id }),
+      });
+      if (res.ok) {
+        router.push('/dashboard');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTerminating(false);
+    }
+  };
 
   // Typing indicator
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -478,6 +500,14 @@ export default function ChatPage() {
           >
             <FolderLock className="w-4 h-4" />
           </Link>
+
+          <button
+            onClick={() => setShowTerminateModal(true)}
+            className="p-2.5 border border-zinc-700/80 hover:border-red-500/50 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 transition-colors"
+            title="Encerrar conexão"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
@@ -726,6 +756,44 @@ export default function ChatPage() {
             >
               Confirmar e Fechar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 7. TERMINATE CONNECTION CONFIRMATION MODAL */}
+      {showTerminateModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="max-w-md w-full border border-zinc-800 bg-[#0e0e10] p-8 text-center relative shadow-2xl">
+            <button
+              onClick={() => setShowTerminateModal(false)}
+              className="absolute top-4 right-4 text-zinc-500 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-base font-bold uppercase tracking-wider text-white mb-2">
+              Encerrar Conexão com {partner?.name}?
+            </h3>
+            <p className="text-xs text-zinc-400 font-light leading-relaxed mb-6">
+              Ao encerrar esta conexão, este espaço será finalizado e poderás iniciar ou entrar num
+              novo espaço com outra pessoa.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <button
+                onClick={handleTerminateConnection}
+                disabled={terminating}
+                className="w-full sm:w-auto px-6 py-3.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase tracking-widest transition-colors disabled:opacity-50"
+              >
+                {terminating ? 'A encerrar...' : 'Sim, Encerrar'}
+              </button>
+              <button
+                onClick={() => setShowTerminateModal(false)}
+                className="w-full sm:w-auto px-6 py-3.5 border border-zinc-700 text-zinc-300 hover:text-white text-xs uppercase tracking-widest transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}
