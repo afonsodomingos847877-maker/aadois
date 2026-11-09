@@ -1,0 +1,144 @@
+// Prisma schema for ADOIS with MongoDB Atlas & Cloudinary
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id             String          @id @default(auto()) @map("_id") @db.ObjectId
+  email          String          @unique
+  passwordHash   String
+  name           String
+  avatarUrl      String?
+  publicKey      String?         // Public key (ECDH P-256) for E2EE key agreement
+  isAdmin        Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  devices        Device[]
+  sessions       Session[]
+  spacesAsUser1  Space[]         @relation("SpaceUser1")
+  spacesAsUser2  Space[]         @relation("SpaceUser2")
+  invitesCreated InviteCode[]
+  messagesSent   EncryptedMessage[]
+  filesSent      EncryptedFile[]
+  auditLogs      AuditLog[]
+}
+
+model Device {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @db.ObjectId
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceName String
+  ipAddress  String?
+  userAgent  String?
+  lastActive DateTime @default(now())
+  isRevoked  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Session {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// STRICT RULE: An ADOIS Space can ONLY ever have user1 and user2.
+model Space {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  name      String    @default("Espaço Privado")
+  user1Id   String    @db.ObjectId
+  user1     User      @relation("SpaceUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2Id   String?   @db.ObjectId
+  user2     User?     @relation("SpaceUser2", fields: [user2Id], references: [id], onDelete: SetNull)
+  status    String    @default("active") // "active", "terminated"
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  invites   InviteCode[]
+  messages  EncryptedMessage[]
+  files     EncryptedFile[]
+
+  @@index([user1Id])
+  @@index([user2Id])
+}
+
+model InviteCode {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  spaceId   String    @db.ObjectId
+  space     Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  creatorId String    @db.ObjectId
+  creator   User      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  code      String    @unique
+  expiresAt DateTime
+  isUsed    Boolean   @default(false)
+  isRevoked Boolean   @default(false)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([spaceId])
+}
+
+model EncryptedMessage {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  spaceId      String    @db.ObjectId
+  space        Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  senderId     String    @db.ObjectId
+  sender       User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  ciphertext   String    // Base64 encrypted payload
+  iv           String    // Base64 IV (12 bytes)
+  ephemeralTtl Int?      // TTL in seconds, null if permanent
+  expiresAt    DateTime? // Timestamp when the message expires and should be purged
+  status       String    @default("sent") // "sent", "delivered", "read"
+  replyToId    String?
+  reactions    String?   // JSON map of reactions: { "❤️": ["user_id"] }
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+
+  @@index([spaceId])
+  @@index([senderId])
+  @@index([expiresAt])
+}
+
+model EncryptedFile {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  spaceId            String   @db.ObjectId
+  space              Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  senderId           String   @db.ObjectId
+  sender             User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  fileType           String   // "image", "video", "document", "audio"
+  mimeType           String
+  sizeBytes          Int
+  cloudinaryUrl      String   // Secure Cloudinary URL for the encrypted blob
+  cloudinaryPublicId String   // Cloudinary public ID for the encrypted asset
+  iv                 String   // Base64 IV used for AES-GCM
+  fileNameCiphertext String   // Encrypted filename so Cloudinary/Server cannot read original name
+  createdAt          DateTime @default(now())
+
+  @@index([spaceId])
+  @@index([senderId])
+}
+
+model AuditLog {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  eventType String   // "LOGIN", "FAILED_LOGIN", "REGISTER", "SPACE_CREATE", "SPACE_JOIN", "DEVICE_REVOKE"
+  userId    String?  @db.ObjectId
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ipAddress String?
+  metadata  String?  // JSON string
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([eventType])
+}
