@@ -23,11 +23,11 @@ import {
   ShieldCheck,
   Check,
   CheckCheck,
-  Smile,
   X,
   FileUp,
   FolderLock,
   AlertTriangle,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface DecryptedMessage {
@@ -60,16 +60,18 @@ export default function ChatPage() {
   const [inputText, setInputText] = useState('');
   const [isPartnerOnline, setIsPartnerOnline] = useState(false);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
-  const [ephemeralTtl, setEphemeralTtl] = useState<number | null>(null); // seconds
+  const [ephemeralTtl, setEphemeralTtl] = useState<number | null>(null);
   const [replyingTo, setReplyingTo] = useState<DecryptedMessage | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+
+  // Privacy screen shield on blur/tab switch
+  const [isScreenHidden, setIsScreenHidden] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<any>(null);
 
-  // Auto scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -77,6 +79,15 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isPartnerTyping]);
+
+  // Privacy screen blur on visibility change
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      setIsScreenHidden(document.hidden);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
 
   // 1. Initial Load & E2EE Handshake
   useEffect(() => {
@@ -94,7 +105,6 @@ export default function ChatPage() {
 
         const currentSpace = meData.space;
         if (!currentSpace || !currentSpace.user2) {
-          // Space is not fully connected with two users
           router.push('/dashboard');
           return;
         }
@@ -205,7 +215,6 @@ export default function ChatPage() {
               },
             ]);
 
-            // Notify sender that message is read
             socket.emit('mark-read', {
               spaceId: currentSpace.id,
               messageIds: [newMsg.id],
@@ -251,7 +260,7 @@ export default function ChatPage() {
     };
   }, [router]);
 
-  // 2. Typing indicator emitter
+  // Typing indicator
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputText(e.target.value);
     if (!socketRef.current || !space) return;
@@ -263,7 +272,7 @@ export default function ChatPage() {
     }, 2000);
   };
 
-  // 3. Send Message
+  // Send message
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || !roomKey || !space || !socketRef.current) return;
@@ -272,7 +281,6 @@ export default function ChatPage() {
     setInputText('');
 
     try {
-      // Encrypt message locally with AES-256-GCM
       const { ciphertext, iv } = await encryptTextMessage(messageText, roomKey);
 
       socketRef.current.emit(
@@ -309,26 +317,46 @@ export default function ChatPage() {
     }
   };
 
-  // 4. Delete message
   const handleDeleteMessage = (messageId: string) => {
     if (!socketRef.current || !space) return;
     socketRef.current.emit('delete-message', { spaceId: space.id, messageId });
   };
 
-  // 5. React with emoji
   const handleReact = (messageId: string, emoji: string) => {
     if (!socketRef.current || !space) return;
     socketRef.current.emit('react-message', { spaceId: space.id, messageId, emoji });
   };
 
-  // Filter messages if search is active
+  // Auto detect URLs for clickable links
+  const renderMessageContent = (text: string) => {
+    const urlPattern = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlPattern);
+
+    return parts.map((part, index) => {
+      if (part.match(urlPattern)) {
+        return (
+          <a
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:opacity-80 break-all text-sky-400 font-medium"
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   const filteredMessages = searchQuery
     ? messages.filter((m) => m.text.toLowerCase().includes(searchQuery.toLowerCase()))
     : messages;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-gray-500 font-mono text-xs uppercase tracking-widest">
+      <div className="min-h-screen bg-black flex items-center justify-center text-white font-mono text-sm uppercase tracking-widest">
         A inicializar chaves criptográficas ponta a ponta...
       </div>
     );
@@ -339,16 +367,16 @@ export default function ChatPage() {
       <div className="min-h-screen bg-black text-white selection:bg-white selection:text-black">
         <Navbar />
         <div className="pt-36 max-w-lg mx-auto px-6 text-center">
-          <div className="p-4 border border-red-500/30 bg-red-950/20 text-red-400 text-xs mb-6">
-            <AlertTriangle className="w-6 h-6 mx-auto mb-2 text-red-400" />
-            <span className="font-bold uppercase tracking-wider block mb-1">
+          <div className="p-6 border border-red-500/40 bg-red-950/20 text-red-300 text-sm mb-6">
+            <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-red-400" />
+            <span className="font-bold uppercase tracking-wider block mb-2">
               Erro de Criptografia
             </span>
             <span>{cryptoError}</span>
           </div>
           <Link
             href="/dashboard"
-            className="px-6 py-3 bg-white text-black text-xs font-semibold uppercase tracking-widest"
+            className="px-6 py-3 bg-white text-black text-xs font-bold uppercase tracking-widest"
           >
             Voltar ao Dashboard
           </Link>
@@ -359,75 +387,93 @@ export default function ChatPage() {
 
   return (
     <div className="h-screen bg-black text-white flex flex-col overflow-hidden selection:bg-white selection:text-black">
-      {/* 1. TOP BAR */}
-      <header className="h-16 border-b border-white/[0.08] bg-black/90 backdrop-blur-md px-6 flex items-center justify-between shrink-0 z-20">
+      {/* Privacy Shield Overlay on Focus Loss */}
+      {isScreenHidden && (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center text-center p-6 select-none">
+          <Lock className="w-12 h-12 text-zinc-500 mb-4" />
+          <div className="text-base font-bold uppercase tracking-[0.3em] text-white">ADOIS</div>
+          <div className="text-xs text-zinc-400 font-mono tracking-widest mt-2">
+            CONTEÚDO PRIVADO PROTEGIDO
+          </div>
+        </div>
+      )}
+
+      {/* 1. TOP HEADER - ULTRA-CLEAR PRESENCE INDICATOR */}
+      <header className="h-18 border-b border-zinc-800 bg-[#0d0d0f] px-6 flex items-center justify-between shrink-0 z-20">
         <div className="flex items-center space-x-4">
-          <Link href="/dashboard" className="text-xs uppercase tracking-[0.25em] text-gray-400 hover:text-white">
-            ← ADOIS
+          <Link
+            href="/dashboard"
+            className="p-2 border border-zinc-700/60 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
+            title="Voltar ao Dashboard"
+          >
+            <ArrowLeft className="w-4 h-4" />
           </Link>
-          <span className="text-gray-600">/</span>
-          <div className="flex items-center space-x-3">
-            <div className="relative">
-              <div className="w-8 h-8 rounded-none border border-white/20 bg-[#161616] flex items-center justify-center font-bold text-xs uppercase">
-                {partner?.name?.charAt(0)}
-              </div>
-              <span
-                className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-black ${
-                  isPartnerOnline ? 'bg-green-400' : 'bg-gray-600'
-                }`}
-                title={isPartnerOnline ? 'Online' : 'Offline'}
-              />
+
+          <div className="flex items-center space-x-3.5">
+            <div className="w-10 h-10 rounded-full border border-zinc-700 bg-zinc-900 flex items-center justify-center font-bold text-sm uppercase text-white shadow-inner">
+              {partner?.name?.charAt(0)}
             </div>
+
             <div>
-              <div className="text-xs font-semibold uppercase tracking-widest text-white">
+              <div className="text-sm font-bold uppercase tracking-wider text-white">
                 {partner?.name}
               </div>
-              <div className="text-[10px] text-gray-500 font-mono">
-                {isPartnerOnline ? 'Conectado agora' : 'Desconectado'}
+
+              {/* CLEAR AND PROMINENT ONLINE BADGE */}
+              <div className="flex items-center space-x-2 mt-0.5">
+                {isPartnerOnline ? (
+                  <span className="inline-flex items-center space-x-1.5 text-xs text-emerald-400 font-semibold tracking-wide uppercase">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse" />
+                    <span>ONLINE AGORA</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center space-x-1.5 text-xs text-zinc-400 font-medium tracking-wide uppercase">
+                    <span className="w-2 h-2 rounded-full bg-zinc-500" />
+                    <span>OFFLINE</span>
+                  </span>
+                )}
               </div>
             </div>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3">
           {/* Ephemeral Timer Selector */}
-          <div className="flex items-center space-x-1 border border-white/10 px-2 py-1 bg-[#0c0c0c] text-[11px] font-mono">
-            <Clock className="w-3.5 h-3.5 text-gray-400" />
+          <div className="flex items-center space-x-1.5 border border-zinc-700/80 px-2.5 py-1.5 bg-zinc-900 text-xs font-mono">
+            <Clock className="w-3.5 h-3.5 text-zinc-400" />
             <select
               value={ephemeralTtl || ''}
               onChange={(e) => setEphemeralTtl(e.target.value ? Number(e.target.value) : null)}
-              className="bg-transparent text-gray-300 text-xs focus:outline-none cursor-pointer"
+              className="bg-transparent text-zinc-200 text-xs focus:outline-none cursor-pointer"
             >
-              <option value="" className="bg-black text-white">Permanente</option>
-              <option value="30" className="bg-black text-white">30 seg</option>
-              <option value="300" className="bg-black text-white">5 min</option>
-              <option value="3600" className="bg-black text-white">1 hora</option>
-              <option value="86400" className="bg-black text-white">24 horas</option>
+              <option value="" className="bg-zinc-950 text-white">Mensagens: Permanentes</option>
+              <option value="30" className="bg-zinc-950 text-white">Autodestruição: 30 seg</option>
+              <option value="300" className="bg-zinc-950 text-white">Autodestruição: 5 min</option>
+              <option value="3600" className="bg-zinc-950 text-white">Autodestruição: 1 hora</option>
+              <option value="86400" className="bg-zinc-950 text-white">Autodestruição: 24 horas</option>
             </select>
           </div>
 
-          {/* Search Toggle */}
           <button
             onClick={() => setShowSearch(!showSearch)}
-            className="p-2 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+            className="p-2.5 border border-zinc-700/80 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
             title="Pesquisar mensagens"
           >
             <Search className="w-4 h-4" />
           </button>
 
-          {/* Safety Number Button */}
           <button
             onClick={() => setShowSafetyModal(true)}
-            className="p-2 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+            className="p-2.5 border border-zinc-700/80 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
             title="Código de Segurança E2EE"
           >
-            <ShieldCheck className="w-4 h-4 text-green-400" />
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
           </button>
 
           <Link
             href="/space/files"
-            className="p-2 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+            className="p-2.5 border border-zinc-700/80 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
             title="O Nosso Espaço (Ficheiros)"
           >
             <FolderLock className="w-4 h-4" />
@@ -435,40 +481,39 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* 2. SEARCH BAR DRAWER (If Open) */}
+      {/* 2. SEARCH DRAWER */}
       {showSearch && (
-        <div className="p-3 bg-[#0d0d0d] border-b border-white/[0.08] flex items-center space-x-3 px-6">
-          <Search className="w-4 h-4 text-gray-500" />
+        <div className="p-3 bg-[#111114] border-b border-zinc-800 flex items-center space-x-3 px-6">
+          <Search className="w-4 h-4 text-zinc-400" />
           <input
             type="text"
-            placeholder="Pesquisar no histórico decifrado..."
+            placeholder="Pesquisar mensagens decifradas..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-transparent text-xs text-white placeholder:text-gray-600 focus:outline-none flex-1 font-sans"
+            className="bg-transparent text-sm text-white placeholder:text-zinc-500 focus:outline-none flex-1 font-sans"
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="text-gray-500 hover:text-white">
+            <button onClick={() => setSearchQuery('')} className="text-zinc-400 hover:text-white">
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
       )}
 
-      {/* 3. MESSAGES SCROLL AREA */}
+      {/* 3. MESSAGES SCROLL AREA (SUPER LEGIBLE) */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-black">
         {/* Security Banner */}
-        <div className="max-w-md mx-auto my-6 p-4 border border-white/[0.08] bg-[#0c0c0c] text-center">
-          <div className="inline-flex items-center space-x-2 text-[11px] uppercase tracking-widest text-gray-400 font-mono mb-1">
-            <Lock className="w-3.5 h-3.5 text-white/70" />
-            <span>Comunicação Protegida por E2EE</span>
+        <div className="max-w-md mx-auto my-4 p-4 border border-zinc-800 bg-[#0e0e10] text-center">
+          <div className="inline-flex items-center space-x-2 text-xs uppercase tracking-widest text-zinc-300 font-mono mb-1">
+            <Lock className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Criptografia Ponta a Ponta Ativa</span>
           </div>
-          <p className="text-[11px] text-gray-500 font-light">
-            Apenas tu e {partner?.name} possuem as chaves para decifrar estas mensagens. Nem a equipa da
-            ADOIS consegue ler este conteúdo.
+          <p className="text-xs text-zinc-400 font-light leading-relaxed">
+            Apenas tu e {partner?.name} conseguem ler estas mensagens. O servidor não tem acesso às chaves.
           </p>
         </div>
 
-        {/* Message Bubble List */}
+        {/* Messages */}
         {filteredMessages.map((msg) => {
           const isMe = msg.senderId === currentUser.id;
           const repliedMsg = msg.replyToId
@@ -480,14 +525,14 @@ export default function ChatPage() {
               key={msg.id}
               className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}
             >
-              {/* Replying quote preview */}
+              {/* Replied Message Quote */}
               {repliedMsg && (
                 <div
-                  className={`text-[10px] text-gray-500 mb-1 max-w-sm truncate border-l-2 pl-2 ${
-                    isMe ? 'border-white text-right' : 'border-gray-500 text-left'
+                  className={`text-xs text-zinc-400 mb-1 max-w-sm truncate border-l-2 pl-2 ${
+                    isMe ? 'border-white text-right' : 'border-zinc-500 text-left'
                   }`}
                 >
-                  <span className="font-semibold uppercase tracking-wider">
+                  <span className="font-semibold uppercase tracking-wider text-zinc-300">
                     {repliedMsg.senderId === currentUser.id ? 'Tu: ' : `${partner?.name}: `}
                   </span>
                   {repliedMsg.text}
@@ -496,23 +541,23 @@ export default function ChatPage() {
 
               {/* Message Bubble */}
               <div
-                className={`relative max-w-md md:max-w-lg p-4 text-sm leading-relaxed transition-all ${
+                className={`relative max-w-md md:max-w-lg p-4 text-[15px] sm:text-base leading-relaxed transition-all shadow-md ${
                   isMe
-                    ? 'bg-white text-black font-normal'
-                    : 'bg-[#1a1a1a] text-white font-light border border-white/[0.06]'
+                    ? 'bg-white text-black font-normal rounded-2xl rounded-tr-sm'
+                    : 'bg-[#1c1c1f] text-zinc-100 font-normal border border-zinc-700/60 rounded-2xl rounded-tl-sm'
                 }`}
               >
-                <div>{msg.text}</div>
+                <div>{renderMessageContent(msg.text)}</div>
 
-                {/* Footer metadata: time, ephemeral indicator, read receipt */}
+                {/* Footer metadata */}
                 <div
-                  className={`flex items-center justify-end space-x-2 mt-2 text-[10px] font-mono ${
-                    isMe ? 'text-gray-600' : 'text-gray-400'
+                  className={`flex items-center justify-end space-x-2 mt-2 text-xs font-mono ${
+                    isMe ? 'text-zinc-600' : 'text-zinc-400'
                   }`}
                 >
                   {msg.ephemeralTtl && (
                     <span className="flex items-center space-x-1" title="Mensagem temporária">
-                      <Clock className="w-3 h-3" />
+                      <Clock className="w-3.5 h-3.5" />
                       <span>{msg.ephemeralTtl}s</span>
                     </span>
                   )}
@@ -523,11 +568,11 @@ export default function ChatPage() {
                     })}
                   </span>
                   {isMe && (
-                    <span title={msg.status === 'read' ? 'Lida' : 'Enviada'}>
+                    <span>
                       {msg.status === 'read' ? (
-                        <CheckCheck className="w-3.5 h-3.5 text-black" />
+                        <CheckCheck className="w-4 h-4 text-black" />
                       ) : (
-                        <Check className="w-3.5 h-3.5 text-gray-500" />
+                        <Check className="w-4 h-4 text-zinc-500" />
                       )}
                     </span>
                   )}
@@ -535,12 +580,12 @@ export default function ChatPage() {
 
                 {/* Reactions badge */}
                 {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                  <div className="absolute -bottom-3 right-2 flex items-center space-x-1 bg-black border border-white/20 px-1.5 py-0.5 rounded-full text-xs">
+                  <div className="absolute -bottom-3 right-2 flex items-center space-x-1 bg-black border border-zinc-700 px-2 py-0.5 rounded-full text-xs shadow-md">
                     {Object.entries(msg.reactions).map(([emoji, userIds]) => (
                       <span key={emoji} className="flex items-center space-x-0.5">
                         <span>{emoji}</span>
                         {userIds.length > 1 && (
-                          <span className="text-[10px] text-gray-400 font-mono">
+                          <span className="text-[11px] text-zinc-400 font-mono">
                             {userIds.length}
                           </span>
                         )}
@@ -550,9 +595,9 @@ export default function ChatPage() {
                 )}
               </div>
 
-              {/* Quick Actions (Reply, React, Delete) - Visible on hover */}
+              {/* Hover Quick Actions */}
               <div
-                className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-2 mt-1 text-gray-500 text-xs px-1 ${
+                className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-2 mt-1 text-zinc-400 text-xs px-1 ${
                   isMe ? 'flex-row-reverse space-x-reverse' : ''
                 }`}
               >
@@ -561,7 +606,7 @@ export default function ChatPage() {
                   className="hover:text-white p-1"
                   title="Responder"
                 >
-                  <CornerUpLeft className="w-3.5 h-3.5" />
+                  <CornerUpLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleReact(msg.id, '❤️')}
@@ -587,7 +632,7 @@ export default function ChatPage() {
                     className="hover:text-red-400 p-1"
                     title="Apagar mensagem"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -597,8 +642,8 @@ export default function ChatPage() {
 
         {/* Partner Typing Bubble */}
         {isPartnerTyping && (
-          <div className="flex items-center space-x-2 text-xs text-gray-400 font-mono py-2">
-            <span className="w-2 h-2 rounded-full bg-white animate-bounce" />
+          <div className="flex items-center space-x-2 text-xs text-zinc-300 font-mono py-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-bounce" />
             <span>{partner?.name} está a escrever...</span>
           </div>
         )}
@@ -606,31 +651,31 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 4. REPLYING BAR (If set) */}
+      {/* 4. REPLYING BAR */}
       {replyingTo && (
-        <div className="p-2.5 bg-[#111111] border-t border-white/[0.08] flex items-center justify-between px-6 text-xs text-gray-400">
+        <div className="p-3 bg-[#131316] border-t border-zinc-800 flex items-center justify-between px-6 text-xs text-zinc-300">
           <div className="flex items-center space-x-2 truncate">
-            <CornerUpLeft className="w-3.5 h-3.5 text-white" />
-            <span className="uppercase tracking-widest text-white font-semibold">
+            <CornerUpLeft className="w-4 h-4 text-white" />
+            <span className="uppercase tracking-wider text-white font-semibold">
               A responder a:
             </span>
             <span className="truncate italic">"{replyingTo.text}"</span>
           </div>
-          <button onClick={() => setReplyingTo(null)} className="hover:text-white">
+          <button onClick={() => setReplyingTo(null)} className="hover:text-white p-1">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* 5. BOTTOM INPUT BAR */}
-      <footer className="p-4 border-t border-white/[0.08] bg-black shrink-0">
+      {/* 5. BOTTOM INPUT BAR (HIGH CONTRAST & VERY LEGIBLE) */}
+      <footer className="p-4 border-t border-zinc-800 bg-[#0d0d0f] shrink-0">
         <form onSubmit={handleSendMessage} className="max-w-5xl mx-auto flex items-center space-x-3">
           <Link
             href="/space/files"
-            className="p-3 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+            className="p-3.5 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
             title="Enviar ficheiro encriptado"
           >
-            <FileUp className="w-4 h-4" />
+            <FileUp className="w-5 h-5" />
           </Link>
 
           <input
@@ -638,39 +683,38 @@ export default function ChatPage() {
             value={inputText}
             onChange={handleInputChange}
             placeholder="Mensagem encriptada ponta a ponta..."
-            className="flex-1 px-4 py-3 bg-[#0d0d0d] border border-white/10 text-white text-sm placeholder:text-gray-600 focus:outline-none focus:border-white transition-colors"
+            className="flex-1 px-4 py-3.5 bg-black border border-zinc-700 text-white text-base placeholder:text-zinc-500 focus:outline-none focus:border-white transition-colors"
           />
 
           <button
             type="submit"
             disabled={!inputText.trim()}
-            className="px-6 py-3 bg-white text-black font-semibold text-xs uppercase tracking-[0.2em] hover:bg-gray-200 transition-colors flex items-center space-x-2 disabled:opacity-30"
+            className="px-6 py-3.5 bg-white text-black font-bold text-sm uppercase tracking-wider hover:bg-zinc-200 transition-colors flex items-center space-x-2 disabled:opacity-30 shadow-md"
           >
             <span>Enviar</span>
-            <Send className="w-3.5 h-3.5" />
+            <Send className="w-4 h-4" />
           </button>
         </form>
       </footer>
 
-      {/* 6. SAFETY NUMBERS VERIFICATION MODAL */}
+      {/* 6. SAFETY MODAL */}
       {showSafetyModal && safetyNumbers && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
-          <div className="max-w-md w-full border border-white/20 bg-black p-8 text-center">
-            <div className="w-12 h-12 border border-white/20 mx-auto flex items-center justify-center mb-6">
-              <ShieldCheck className="w-6 h-6 text-green-400" />
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="max-w-md w-full border border-zinc-700 bg-[#0d0d0f] p-8 text-center shadow-2xl">
+            <div className="w-12 h-12 border border-zinc-700 mx-auto flex items-center justify-center mb-6">
+              <ShieldCheck className="w-6 h-6 text-emerald-400" />
             </div>
-            <h3 className="text-base font-bold uppercase tracking-widest text-white mb-2">
+            <h3 className="text-lg font-bold uppercase tracking-wider text-white mb-2">
               Verificação de Identidade
             </h3>
-            <p className="text-xs text-gray-400 font-light leading-relaxed mb-6">
-              Compara este código de 30 dígitos com o que aparece no ecrã de {partner?.name}. Se os
-              números coincidirem, tens a garantia matemática de que a ligação não foi intercetada por
-              terceiros.
+            <p className="text-sm text-zinc-300 font-light leading-relaxed mb-6">
+              Compara este código de 30 dígitos com o que aparece no ecrã de {partner?.name} para
+              confirmar que a ligação é 100% segura e direta.
             </p>
 
-            <div className="grid grid-cols-3 gap-2 font-mono text-xs font-bold text-white mb-8">
+            <div className="grid grid-cols-3 gap-2 font-mono text-sm font-bold text-white mb-8">
               {safetyNumbers.map((group, idx) => (
-                <div key={idx} className="p-3 border border-white/10 bg-[#0c0c0c] tracking-widest">
+                <div key={idx} className="p-3 border border-zinc-700 bg-black tracking-widest shadow-inner">
                   {group}
                 </div>
               ))}
@@ -678,7 +722,7 @@ export default function ChatPage() {
 
             <button
               onClick={() => setShowSafetyModal(false)}
-              className="w-full py-3 bg-white text-black font-semibold text-xs uppercase tracking-widest hover:bg-gray-200 transition-colors"
+              className="w-full py-3.5 bg-white text-black font-bold text-xs uppercase tracking-wider hover:bg-zinc-200 transition-colors"
             >
               Confirmar e Fechar
             </button>

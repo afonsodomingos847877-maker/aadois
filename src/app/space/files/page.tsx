@@ -308,16 +308,16 @@ export default function OurSpaceFilesPage() {
         )}
 
         {/* Filter Tabs and Search Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-white/[0.06] mb-8 gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-zinc-800 mb-8 gap-4">
           <div className="flex space-x-2 overflow-x-auto">
             {(['all', 'image', 'video', 'document'] as const).map((cat) => (
               <button
                 key={cat}
                 onClick={() => setCategory(cat)}
-                className={`px-4 py-2 text-xs uppercase tracking-widest font-semibold transition-colors ${
+                className={`px-4 py-2.5 text-xs uppercase tracking-wider font-semibold transition-colors ${
                   category === cat
                     ? 'bg-white text-black'
-                    : 'text-gray-400 border border-white/10 hover:border-white/30'
+                    : 'text-zinc-400 border border-zinc-800 hover:border-zinc-600 hover:text-white'
                 }`}
               >
                 {cat === 'all'
@@ -332,25 +332,25 @@ export default function OurSpaceFilesPage() {
           </div>
 
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Pesquisar ficheiros..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-64 pl-9 pr-4 py-2 bg-[#0c0c0c] border border-white/10 text-xs text-white focus:outline-none focus:border-white transition-colors"
+              className="w-full sm:w-64 pl-9 pr-4 py-2.5 bg-black border border-zinc-700 text-sm text-white focus:outline-none focus:border-white transition-colors"
             />
           </div>
         </div>
 
         {/* Files Grid / List */}
         {filteredFiles.length === 0 ? (
-          <div className="py-20 text-center border border-white/[0.06] bg-[#080808]">
-            <FolderLock className="w-8 h-8 text-gray-600 mx-auto mb-4" />
-            <div className="text-sm uppercase tracking-widest font-semibold text-gray-400 mb-1">
+          <div className="py-20 text-center border border-zinc-800 bg-[#0e0e10]">
+            <FolderLock className="w-10 h-10 text-zinc-600 mx-auto mb-4" />
+            <div className="text-base uppercase tracking-wider font-semibold text-zinc-300 mb-2">
               Nenhum ficheiro partilhado
             </div>
-            <p className="text-xs text-gray-600 max-w-sm mx-auto">
+            <p className="text-sm text-zinc-400 max-w-sm mx-auto leading-relaxed">
               Todos os ficheiros enviados aqui são encriptados com AES-256-GCM antes de serem
               carregados e apenas podem ser decifrados por ti e por {partner?.name}.
             </p>
@@ -360,35 +360,35 @@ export default function OurSpaceFilesPage() {
             {filteredFiles.map((file) => (
               <div
                 key={file.id}
-                className="border border-white/[0.08] bg-[#0c0c0c] p-6 flex flex-col justify-between hover:border-white/20 transition-colors group"
+                className="border border-zinc-800 bg-[#0e0e11] p-6 flex flex-col justify-between hover:border-zinc-600 transition-colors group"
               >
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <div className="p-2 border border-white/10 bg-black text-white">
+                    <div className="p-2.5 border border-zinc-700 bg-black text-white">
                       {file.fileType === 'image' ? (
-                        <ImageIcon className="w-4 h-4" />
+                        <ImageIcon className="w-5 h-5" />
                       ) : file.fileType === 'video' ? (
-                        <Video className="w-4 h-4" />
+                        <Video className="w-5 h-5" />
                       ) : (
-                        <FileText className="w-4 h-4" />
+                        <FileText className="w-5 h-5" />
                       )}
                     </div>
-                    <span className="text-[10px] text-gray-500 font-mono">
+                    <span className="text-xs text-zinc-400 font-mono">
                       {new Date(file.createdAt).toLocaleDateString('pt-PT')}
                     </span>
                   </div>
 
-                  <h3 className="text-xs font-semibold text-white tracking-wide truncate mb-1" title={file.decryptedFileName}>
+                  <h3 className="text-sm font-semibold text-white tracking-wide truncate mb-1" title={file.decryptedFileName}>
                     {file.decryptedFileName}
                   </h3>
-                  <div className="text-[11px] text-gray-500 font-mono">
+                  <div className="text-xs text-zinc-400 font-mono">
                     {formatSize(file.sizeBytes)} • {file.mimeType}
                   </div>
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-between">
-                  <span className="text-[10px] text-green-400 font-mono flex items-center space-x-1">
-                    <Lock className="w-3 h-3" />
+                <div className="mt-6 pt-4 border-t border-zinc-800 flex items-center justify-between">
+                  <span className="text-xs text-emerald-400 font-mono flex items-center space-x-1.5 font-semibold">
+                    <Lock className="w-3.5 h-3.5" />
                     <span>E2EE Cifrado</span>
                   </span>
 
@@ -396,18 +396,18 @@ export default function OurSpaceFilesPage() {
                     {(file.fileType === 'image' || file.fileType === 'video') && (
                       <button
                         onClick={() => handleDownloadFile(file, true)}
-                        className="p-1.5 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                        className="p-2 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
                         title="Pré-visualizar"
                       >
-                        <Eye className="w-3.5 h-3.5" />
+                        <Eye className="w-4 h-4" />
                       </button>
                     )}
                     <button
                       onClick={() => handleDownloadFile(file, false)}
-                      className="p-1.5 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                      className="p-2 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
                       title="Descarregar e decifrar"
                     >
-                      <Download className="w-3.5 h-3.5" />
+                      <Download className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
